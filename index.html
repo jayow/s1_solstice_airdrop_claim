@@ -440,8 +440,12 @@ function renderHero() {
   const s = DATA.stats;
   const b = s.behavior || {};
   // Hero stats — minimal, clean
-  const denom = s.total_s1_official || s.total_s1_wallets_in_db;
-  const liqPct = ((s.sum_liquid_unlock1/s.sum_total_alloc)*100).toFixed(1);
+  // Percentages reference 1B total SLX supply for clarity (vs the airdrop sub-bucket)
+  const SUPPLY = 1e9;
+  const totalSupplyPct = (s.sum_total_alloc / SUPPLY * 100).toFixed(2);
+  const u1SupplyPct = (s.sum_liquid_unlock1 / SUPPLY * 100).toFixed(2);
+  const u2SupplyPct = (s.sum_u2_3m / SUPPLY * 100).toFixed(2);
+  const u2_9mSupplyPct = (s.sum_u2_9m / SUPPLY * 100).toFixed(2);
   const totalTip = `Target (9.66% × 1B supply): 96.6M SLX\nTracked: ${fmtCompact(s.sum_total_alloc)} SLX (~${(s.sum_total_alloc/96.6e6*100).toFixed(1)}% of target)\nLikely missing (forfeited or unclaimed):\n  • ~3.2M Xeet (top-100 wallets that didn't register)\n  • ~0.57M Presale (218 buyers still need to claim via Legion)\n  • ~0.2M S1 residual (tail wallets)`;
   document.getElementById('stat-tracked').innerHTML = `
     <div class="hero-stats">
@@ -457,18 +461,18 @@ function renderHero() {
       </div>
       <div class="hero-stat" data-tip="${totalTip}">
         <div class="label">Total allocated <span style="color:var(--ink-500); cursor:help;">ⓘ</span></div>
-        <div class="v">${fmtCompact(s.sum_total_alloc)}<span class="unit">SLX</span></div>
-        <div class="sub">of ${fmtCompact(96.6e6)} target (${(s.sum_total_alloc/96.6e6*100).toFixed(1)}%)</div>
+        <div class="v">${fmtCompact(s.sum_total_alloc)}<span class="unit">SLX · ${totalSupplyPct}%</span></div>
+        <div class="sub">of 1B total supply</div>
       </div>
       <div class="hero-stat">
         <div class="label">U1 unlocked</div>
-        <div class="v good">${fmtCompact(s.sum_liquid_unlock1)}<span class="unit">SLX · ${liqPct}%</span></div>
-        <div class="sub">Claimed at TGE (May 25)</div>
+        <div class="v good">${fmtCompact(s.sum_liquid_unlock1)}<span class="unit">SLX · ${u1SupplyPct}%</span></div>
+        <div class="sub">of 1B total supply · claimed at TGE (May 25)</div>
       </div>
-      <div class="hero-stat" data-tip="Estimated assuming 3-month vesting plan for all wallets.\nFormula: vested × 31/92 ≈ 33.7%\nIf all 9m: ${fmtCompact(s.sum_u2_9m)} SLX (${(s.sum_u2_9m/s.sum_total_alloc*100).toFixed(1)}%)">
+      <div class="hero-stat" data-tip="Estimated assuming 3-month vesting plan for all wallets.\nFormula: vested × 31/92 ≈ 33.7%\nIf all 9m: ${fmtCompact(s.sum_u2_9m)} SLX (${u2_9mSupplyPct}% of 1B)">
         <div class="label">U2 unlocked <span style="color:var(--ink-500); cursor:help;">ⓘ</span></div>
-        <div class="v" style="color:#a5b4fc;">${fmtCompact(s.sum_u2_3m)}<span class="unit">SLX · ${(s.sum_u2_3m/s.sum_total_alloc*100).toFixed(1)}%</span></div>
-        <div class="sub">Estimated · unlocks on 5 July 2026</div>
+        <div class="v" style="color:#a5b4fc;">${fmtCompact(s.sum_u2_3m)}<span class="unit">SLX · ${u2SupplyPct}%</span></div>
+        <div class="sub">of 1B total supply · unlocks on 5 July 2026</div>
       </div>
     </div>`;
   // (Hero tooltip wiring is done below alongside donut tooltips — querySelectorAll('[data-tip]') catches both)
@@ -485,21 +489,23 @@ function renderHero() {
     return;
   }
 
-  // Build SVG donut (radius=85, stroke=22).
-  // Each slice is a circle with dash-array = [len, CIRC-len] and offset = -acc (negative shifts forward).
-  const R = 85, CIRC = 2 * Math.PI * R;
+  // Build SVG donut. Use pathLength=1 so SVG normalizes the circumference and
+  // we work in fractions — eliminates the floating-point bowtie that appeared
+  // when 2πR diverged from the rendered path length by a tiny epsilon (the
+  // dash pattern was repeating and rendering a tiny second arc at the start).
+  const R = 85;
   let acc = 0;
   const slices = order.map(k => {
     const v = b[k]?.count || 0;
     if (!v) return '';
     const frac = v / total;
-    const len = CIRC * frac;
-    const dashOffset = -acc;     // negative offset shifts dash forward to start at `acc`
-    acc += len;
+    const dashOffset = 1 - acc;   // positive shift backward by `acc` aligns slice start
+    acc += frac;
     const tooltip = `${labelMap[k]}: ${fmtInt(v)} wallets (${(frac*100).toFixed(1)}%)\nBalance now: ${fmtCompact(b[k].balance_now)} SLX\nLiquid claimed: ${fmtCompact(b[k].liquid_total)} SLX\nRetention: ${b[k].liquid_total > 0 ? (b[k].balance_now/b[k].liquid_total*100).toFixed(1) : 0}%`;
     return `<circle class="slice" cx="100" cy="100" r="${R}" fill="none"
               stroke="${colorHex[k]}" stroke-width="22"
-              stroke-dasharray="${len} ${CIRC - len}"
+              pathLength="1"
+              stroke-dasharray="${frac} ${1 - frac}"
               stroke-dashoffset="${dashOffset}"
               data-tip="${tooltip.replace(/"/g,'&quot;')}"/>`;
   }).join('');

@@ -178,6 +178,15 @@ tbody tr:hover { background: rgba(255,255,255,.015); }
 .wallet { font-family: inherit; font-variant-numeric: tabular-nums; font-size: 13px; }
 .wallet a { color: var(--ink-200); text-decoration: none; transition: color .1s; }
 .wallet a:hover { color: var(--accent-300); }
+.copy-btn { display: inline-flex; align-items: center; justify-content: center;
+            width: 18px; height: 18px; margin-left: 6px; padding: 0; vertical-align: -3px;
+            background: transparent; border: 1px solid transparent; border-radius: 4px;
+            color: var(--ink-400, #6b7280); cursor: pointer; transition: color .12s, background .12s; }
+.copy-btn:hover { color: var(--accent-300); background: rgba(255,255,255,0.04); }
+.copy-btn:focus-visible { outline: 1px solid var(--accent-300); outline-offset: 1px; }
+.copy-btn svg { width: 12px; height: 12px; display: block; }
+.copy-btn.copied { color: #4ade80; }
+.copy-btn.copied svg { transform: scale(1.1); }
 
 .tag { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: 9.5px;
        text-transform: uppercase; letter-spacing: 0.06em; border: 1px solid; margin-left: 6px;
@@ -739,7 +748,7 @@ function render() {
     return `<tr class="${dustClass}">
       <td class="left">${rank}</td>
       <td class="left wallet">
-        <a href="https://solscan.io/account/${r.w}" target="_blank" rel="noopener noreferrer">${trunc(r.w, 10)}</a>
+        <a href="https://solscan.io/account/${r.w}" target="_blank" rel="noopener noreferrer">${trunc(r.w, 10)}</a><button class="copy-btn" data-copy="${r.w}" title="Copy address" aria-label="Copy wallet address"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
         ${tagPills}${cohortTag}
       </td>
       <td><b>${fmt(r.t)}</b></td>
@@ -773,6 +782,27 @@ function render() {
   document.getElementById('next').disabled = state.page >= totalPages;
 
   document.getElementById('table-sub').textContent = `Showing ${sorted.length.toLocaleString()} of ${DATA.rows.length.toLocaleString()} fetched · ${DATA.stats.fetched_pct}% sweep coverage`;
+
+  // Wire copy buttons (idempotent re-bind every render)
+  tbody.querySelectorAll('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const addr = btn.dataset.copy;
+      try {
+        await navigator.clipboard.writeText(addr);
+        const orig = btn.innerHTML;
+        btn.classList.add('copied');
+        btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+        setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = orig; }, 1200);
+      } catch (err) {
+        // Fallback for older browsers / non-https contexts
+        const t = document.createElement('textarea');
+        t.value = addr; document.body.appendChild(t); t.select();
+        try { document.execCommand('copy'); } catch(_) {}
+        document.body.removeChild(t);
+      }
+    });
+  });
 }
 
 
